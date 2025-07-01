@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>선생님 위치 시스템 + 메시지 + 상태관리</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css"/>
+  <style>
+    .page { display: none; }
+    .active { display: block; }
+    .status-btns button { margin: 0.4rem; }
+    fieldset { margin-bottom: 1rem; }
+    .msg-box { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <nav class="container-fluid">
+    <ul>
+      <li><strong>선생님 위치 시스템</strong></li>
+      <li><a href="#" onclick="goToPage('home')">홈</a></li>
+      <li><a href="#" onclick="goToPage('auth')">인증</a></li>
+      <li><a href="#" onclick="goToPage('message')">메시지</a></li>
+      <li><a href="#" onclick="goToPage('statusManage')">상태 관리</a></li>
+      <li><a href="#" onclick="goToPage('dashboard')">전체 현황</a></li>
+      <li><a href="#" onclick="goToPage('changePassword')">비밀번호 변경</a></li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    <!-- 홈 -->
+    <section id="home" class="page active">
+      <h2>홈</h2>
+      <p>
+        교사는 ‘인증’ 페이지에서 교사용 코드를 입력해 로그인 후 ‘상태 관리’에서 상태를 변경하세요.<br/>
+        학생은 ‘메시지’ 페이지에서 선생님을 선택해 요청을 보낼 수 있습니다.
+      </p>
+    </section>
+
+    <!-- 인증 -->
+    <section id="auth" class="page">
+      <h2>인증</h2>
+      <fieldset>
+        <legend>교사용 고유 코드</legend>
+        <input type="text" id="teacherCodeInput" placeholder="교사용 코드 (예:T2025-001)" /><br/>
+        <button onclick="teacherLogin()">로그인</button>
+      </fieldset>
+      <p><a href="#" onclick="logout()">로그아웃</a></p>
+    </section>
+
+    <!-- 메시지 -->
+    <section id="message" class="page">
+      <h2>메시지</h2>
+      <!-- 학생용 -->
+      <fieldset id="studentForm">
+        <legend>학생용 메시지 전송</legend>
+        <input type="text" id="stuId" placeholder="학번" /><br/>
+        <input type="text" id="stuName" placeholder="이름" /><br/>
+        <select id="stuToTeacher">
+          <option value="" disabled selected>선생님 선택</option>
+        </select><br/>
+        <textarea id="stuMsg" rows="3" placeholder="메시지를 입력하세요"></textarea><br/>
+        <button onclick="sendStudentMessage()">보내기</button>
+      </fieldset>
+      <!-- 교사용 받은 메시지 -->
+      <div id="teacherInbox" class="msg-box"></div>
+      <p><a href="#" onclick="goToPage('home')">← 홈으로</a></p>
+    </section>
+
+    <!-- 상태 관리 -->
+    <section id="statusManage" class="page">
+      <h2>상태 관리 (교사용)</h2>
+      <div class="status-btns">
+        <button onclick="setStatus('재실')">재실</button>
+        <button onclick="setStatus('수업중')">수업중</button>
+        <button onclick="setStatus('출장')">출장</button>
+        <button onclick="setStatus('식사')">식사</button>
+        <button onclick="setStatus('퇴실')">퇴실</button>
+      </div>
+      <p><a href="#" onclick="goToPage('home')">← 홈으로</a></p>
+    </section>
+
+    <!-- 전체 현황 -->
+    <section id="dashboard" class="page">
+      <h3>전체 현황 (현재 상태)</h3>
+      <ul id="dashboardList"></ul>
+    </section>
+
+    <!-- 비밀번호 변경 -->
+    <section id="changePassword" class="page">
+      <h3>비밀번호 변경</h3>
+      <input type="password" id="currentPw" placeholder="현재 비밀번호"/><br/>
+      <input type="password" id="newPw" placeholder="새 비밀번호"/><br/>
+      <input type="password" id="newPwConfirm" placeholder="새 비밀번호 확인"/><br/>
+      <button onclick="changePassword()">변경</button>
+    </section>
+  </main>
+
+  <footer class="container">
+    <small>© 2025 선생님 위치 시스템</small>
+  </footer>
+
+  <script>
+    const pages = document.querySelectorAll('.page');
+    let isTeacher = false, meTeacher = '', currentPassword='1111';
+    const teacherCodes = {
+      'T2025-001':'이민주T',
+      'T2025-002':'김윤구T',
+      'T2025-003':'임재화T'
+    };
+    const subjects = {
+      '생명과학':['이민주T','김윤구T','임재화T'], '물리':['한건희T','권진영T'],
+      '지구과학':['김진욱T','최원문T','김우겸T'], '화학':['전철홍T','김리원T'],
+      '국어':['정선혜T','오지연T'], '영어':['최순주T','한신실T','Lauren Thun Teacher'],
+      '역사':['이병수T'], '기초미적':['김수정T','김남형T'], '수학':['전경아T','전계정T'],
+      '체육':['최정호T'], '디지털윤리':['이소민T'], '정보':['이가연T','신요셉T']
+    };
+    const allTeachers = Array.from(new Set(Object.values(subjects).flat()));
+    const studentMessages = {}, teacherStatuses = {};
+
+    function goToPage(id){
+      pages.forEach(p=>p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      if(id==='message') initMessagePage();
+      if(id==='statusManage'){
+        if(!isTeacher){ alert('교사 인증 필요'); goToPage('auth'); }
+      }
+      if(id==='dashboard') renderDashboard();
+    }
+
+    function teacherLogin(){
+      const code = document.getElementById('teacherCodeInput').value.trim();
+      if(teacherCodes[code]){
+        isTeacher=true;
+        meTeacher=teacherCodes[code];
+        alert(meTeacher+'님 로그인 됨');
+        goToPage('statusManage');
+      } else {
+        alert('유효한 코드 아님');
+      }
+    }
+    function logout(){
+      isTeacher=false; meTeacher='';
+      alert('로그아웃');
+      goToPage('home');
+    }
+
+    function initMessagePage(){
+      document.getElementById('studentForm').style.display='block';
+      const inbox=document.getElementById('teacherInbox');
+      if(isTeacher){
+        document.getElementById('studentForm').style.display='none';
+        loadInbox(meTeacher);
+      } else {
+        inbox.innerHTML='';
+      }
+      const sel=document.getElementById('stuToTeacher');
+      sel.innerHTML='<option disabled selected>선생님 선택</option>';
+      allTeachers.forEach(t=> sel.innerHTML+=`<option>${t}</option>`);
+    }
+
+    function sendStudentMessage(){
+      const id=document.getElementById('stuId').value.trim();
+      const name=document.getElementById('stuName').value.trim();
+      const to=document.getElementById('stuToTeacher').value;
+      const msg=document.getElementById('stuMsg').value.trim();
+      if(!id||!name||!to||!msg) return alert('모두 입력');
+      (studentMessages[to]||(studentMessages[to]=[])).push(`${name}(${id}): ${msg}`);
+      alert('메시지 전송');
+    }
+
+    function loadInbox(teacher){
+      const box=document.getElementById('teacherInbox');
+      box.innerHTML=`<h3>${teacher}님 받은 메시지</h3>`;
+      const msgs=studentMessages[teacher]||[];
+      if(!msgs.length) box.innerHTML+='<p>신규 없음</p>';
+      else{
+        const ul=document.createElement('ul');
+        msgs.forEach(m=>{const li=document.createElement('li');li.textContent=m;ul.appendChild(li);});
+        box.appendChild(ul);
+      }
+    }
+
+    function setStatus(st){
+      teacherStatuses[meTeacher]=st;
+      alert('상태 '+st);
+      goToPage('dashboard');
+    }
+
+    function renderDashboard(){
+      const ul=document.getElementById('dashboardList');
+      ul.innerHTML='';
+      allTeachers.forEach(t=>{
+        const status=teacherStatuses[t]||'재실';
+        const li=document.createElement('li');
+        li.textContent=`${t} → ${status}`;
+        ul.appendChild(li);
+      });
+    }
+
+    function changePassword(){
+      const cur=document.getElementById('currentPw').value;
+      const nxt=document.getElementById('newPw').value;
+      const cf=document.getElementById('newPwConfirm').value;
+      if(cur!==currentPassword) return alert('현재 비밀번호 틀림');
+      if(nxt!==cf) return alert('비밀번호 불일치');
+      currentPassword=nxt; alert('비밀번호 변경'); goToPage('home');
+    }
+  </script>
+</body>
+</html>
